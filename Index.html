@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte Tránsito</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #e5e5e5;
+            padding: 15px;
+        }
+        .container {
+            background: white;
+            max-width: 450px;
+            margin: 0 auto;
+            padding: 20px;
+            border-radius: 20px;
+        }
+        h2 { text-align: center; color: #1e3a8a; margin-bottom: 20px; }
+        
+        label { font-weight: 600; font-size: 0.85em; color: #444; display: block; margin-top: 12px; }
+        
+        select, input, textarea {
+            width: 100%;
+            padding: 12px;
+            margin-top: 5px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: 1em;
+        }
+
+        .btn-group { display: flex; gap: 10px; margin-top: 8px; }
+        
+        button {
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+        
+        .btn-gps { background: #2563eb; color: white; flex: 1; }
+        .btn-map { background: #64748b; color: white; flex: 1; }
+        .btn-donar { background: #db2777; color: white; width: 100%; margin-top: 10px; padding: 15px; }
+
+        #map {
+            height: 180px;
+            width: 100%;
+            margin-top: 10px;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .char-count { text-align: right; font-size: 0.75em; color: #888; margin-top: 3px; }
+        
+        .btn-share {
+            background: #25D366;
+            color: white;
+            width: 100%;
+            margin-top: 10px;
+            padding: 15px;
+            font-size: 1em;
+        }
+        
+        .btn-download {
+            background: #7c3aed;
+            color: white;
+            width: 100%;
+            margin-top: 10px;
+            padding: 15px;
+            font-size: 1em;
+        }
+        
+        #mensaje-error {
+            background: #fee2e2;
+            color: #dc2626;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: none;
+            font-size: 0.85em;
+        }
+
+        #mensaje-info {
+            background: #dbeafe;
+            color: #1e40af;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: none;
+            font-size: 0.85em;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            flex-direction: column;
+        }
+        .loading-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loading">
+    <div class="loading-content">
+        <p>⏳ Generando imagen...</p>
+    </div>
+</div>
+
+<div class="container">
+    <h2>🚦 Reporte de Tránsito</h2>
+<div style="background:#f8fafc; padding:10px; border-radius:8px; font-size:12px; margin-bottom:10px;">
+    <strong>Instrucciones:</strong><br>
+    1️⃣ Presiona GPS<br>
+    2️⃣ Escribe el mensaje<br>
+    3️⃣ Descarga o comparte<br><br>
+    🔒 Esta página no guarda información. Solo genera texto e imágenes en tu dispositivo.
+</div>
+
+    <label>Tipo de Operativo</label>
+    <select id="tipoOperativo">
+        <option value="Operativo de Tránsito">Operativo de Tránsito</option>
+        <option value="Control de Tráfico">Control de Tráfico</option>
+        <option value="Operativo Especial">Operativo Especial</option>
+    </select>
+
+    <label>Autoridad</label>
+    <select id="autoridad">
+        <option value="SAT">SAT</option>
+        <option value="ATU">ATU</option>
+        <option value="SUTRAM">SUTRAM</option>
+        <option value="Policía">Policía</option>
+    </select>
+
+    <label>📍 Ubicación</label>
+    <input type="text" id="inputLocation" placeholder="Presiona GPS para obtener dirección">
+    
+    <div class="btn-group">
+        <button class="btn-gps" onclick="obtenerGPS()">📍 GPS</button>
+        <button class="btn-map" onclick="toggleMap()">🗺️ Mapa</button>
+    </div>
+    
+    <div id="map"></div>
+
+    <div id="mensaje-info"></div>
+    <div id="mensaje-error"></div>
+
+    <label>Mensaje (Max 50 caracteres)</label>
+    <textarea id="mensaje" rows="2" maxlength="50" placeholder="Ej: Accidente vehicular..."></textarea>
+    <div class="char-count"><span id="count">0</span>/50</div>
+    
+    <button class="btn-share" onclick="compartirWhatsApp()">📤 Enviar por WhatsApp</button>
+    <button class="btn-download" onclick="descargarImagen()">💾 Descargar Imagen</button>
+    <button class="btn-donar" onclick="mostrarDonacion()">❤️ Donar al creador</button>
+
+</div>
+
+<!-- Modal de donación mejorado -->
+<div id="modal-donacion" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:9999;" onclick="if(event.target===this) cerrarDonacion()">
+    <div style="background:white; padding:20px; border-radius:15px; text-align:center; max-width:300px;">
+        <h3>Apoya el proyecto ❤️</h3>
+        <p>Escanea el QR para donar</p>
+        <img src="qr.png" style="width:200px; margin:10px 0;" onerror="this.style.display='none'">
+        <br>
+        <button onclick="cerrarDonacion()" style="padding:8px 15px; background:#1e3a8a; color:white; border:none; border-radius:5px; cursor:pointer;">Cerrar</button>
+    </div>
+</div>
+
+<script>
+    let map, marker;
+    let latActual = -12.0464;
+    let lonActual = -77.0428;
+    let direccionCompleta = "";
+    let imagenGenerada = null;
+
+    // Inicializar contador de caracteres
+    document.getElementById('mensaje').addEventListener('input', function(e) {
+        document.getElementById('count').innerText = e.target.value.length;
+    });
+
+    function showLoading() { document.getElementById('loading').style.display = 'flex'; }
+    function hideLoading() { document.getElementById('loading').style.display = 'none'; }
+
+    function mostrarError(msg) {
+        const el = document.getElementById('mensaje-error');
+        el.innerHTML = msg;
+        el.style.display = 'block';
+        document.getElementById('mensaje-info').style.display = 'none';
+    }
+
+    function mostrarInfo(msg) {
+        const el = document.getElementById('mensaje-info');
+        el.innerHTML = msg;
+        el.style.display = 'block';
+        document.getElementById('mensaje-error').style.display = 'none';
+    }
+
+    // Obtener dirección desde Nominatim
+    async function obtenerDireccion(lat, lon) {
+        try {
+            const response = await fetch('https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lon + '&format=json&language=es');
+            const data = await response.json();
+            
+            if (data && data.address) {
+                let partes = [];
+                if (data.address.road) partes.push(data.address.road);
+                if (data.address.house_number) partes.push('N° ' + data.address.house_number);
+                if (data.address.neighbourhood) partes.push(data.address.neighbourhood);
+                if (data.address.city || data.address.town) partes.push(data.address.city || data.address.town);
+                return partes.join(', ');
+            }
+            return null;
+        } catch (e) { 
+            return null; 
+        }
+    }
+
+    // Obtener ubicación por GPS
+    function obtenerGPS() {
+        if (!navigator.geolocation) {
+            mostrarError("❌ Tu navegador no soporta GPS");
+            return;
+        }
+
+        mostrarInfo("📍 Solicitando permisos de ubicación...");
+        document.getElementById('inputLocation').value = "Obteniendo...";
+        
+        const opciones = {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 0
+        };
+
+        navigator.geolocation.getCurrentPosition(
+            async function(pos) {
+                latActual = pos.coords.latitude;
+                lonActual = pos.coords.longitude;
+                
+                mostrarInfo("🏠 Buscando dirección...");
+                
+                const direccion = await obtenerDireccion(latActual, lonActual);
+                
+                if (direccion) {
+                    direccionCompleta = direccion;
+                    document.getElementById('inputLocation').value = direccion;
+                } else {
+                    direccionCompleta = latActual.toFixed(5) + ", " + lonActual.toFixed(5);
+                    document.getElementById('inputLocation').value = direccionCompleta;
+                }
+                
+                document.getElementById('mensaje-info').style.display = 'none';
+                document.getElementById('map').style.display = 'block';
+                initMap(true); // Forzar actualización del mapa
+            },
+            function(error) {
+                let mensaje = "❌ Error de GPS: ";
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        mensaje += "Permiso denegado.";
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        mensaje += "No se puede obtener la ubicación.";
+                        break;
+                    case error.TIMEOUT:
+                        mensaje += "Tiempo de espera agotado.";
+                        break;
+                    default:
+                        mensaje += error.message;
+                }
+                mostrarError(mensaje);
+                document.getElementById('inputLocation').value = "";
+            },
+            opciones
+        );
+    }
+
+    // Inicializar o actualizar mapa
+    function initMap(forceCenter = false) {
+        if (!map) {
+            map = L.map('map').setView([latActual, lonActual], 16);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            marker = L.marker([latActual, lonActual]).addTo(map);
+            
+            map.on('click', async function(e) {
+                latActual = e.latlng.lat;
+                lonActual = e.latlng.lng;
+                
+                mostrarInfo("🏠 Buscando dirección...");
+                const direccion = await obtenerDireccion(latActual, lonActual);
+                
+                if (direccion) {
+                    direccionCompleta = direccion;
+                    document.getElementById('inputLocation').value = direccion;
+                } else {
+                    direccionCompleta = latActual.toFixed(5) + ", " + lonActual.toFixed(5);
+                    document.getElementById('inputLocation').value = direccionCompleta;
+                }
+                
+                document.getElementById('mensaje-info').style.display = 'none';
+                
+                if(marker) marker.remove();
+                marker = L.marker([latActual, lonActual]).addTo(map);
+            });
+        } else if (forceCenter) {
+            map.setView([latActual, lonActual], 16);
+            if(marker) marker.setLatLng([latActual, lonActual]);
+        }
+    }
+
+    function toggleMap() {
+        const mapDiv = document.getElementById('map');
+        if (mapDiv.style.display === 'none') {
+            mapDiv.style.display = 'block';
+            initMap(true);
+            // Forzar redimensionamiento si el mapa ya existe
+            if (map) setTimeout(() => map.invalidateSize(), 100);
+        } else {
+            mapDiv.style.display = 'none';
+        }
+    }
+
+    // Función mejorada para cargar html2canvas con múltiples CDNs
+    function cargarLibreria() {
+        return new Promise(function(resolve, reject) {
+            if (window.html2canvas) {
+                resolve();
+                return;
+            }
+
+            const cdnList = [
+                'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+                'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
+                'https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js'
+            ];
+
+            let intentos = 0;
+
+            function cargarProximo() {
+                if (intentos >= cdnList.length) {
+                    reject(new Error('No se pudo cargar la librería de captura. Verifica tu conexión a internet.'));
+                    return;
+                }
+
+                const script = document.createElement('script');
+                script.src = cdnList[intentos];
+                script.onload = resolve;
+                script.onerror = function() {
+                    intentos++;
+                    cargarProximo();
+                };
+                document.head.appendChild(script);
+            }
+
+            cargarProximo();
+        });
+    }
+
+    // Pequeña pausa para asegurar renderizado
+    function delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // Generar imagen del reporte
+    async function generarImagen() {
+        const lugar = document.getElementById('inputLocation').value;
+        
+        if(!lugar || lugar === "Obteniendo...") {
+            throw new Error("⚠️ Obtén la ubicación primero");
+        }
+
+        await cargarLibreria();
+
+        const tipo = document.getElementById('tipoOperativo').value;
+        const autoridad = document.getElementById('autoridad').value;
+        const mensaje = document.getElementById('mensaje').value || "Sin mensaje";
+        const fecha = new Date().toLocaleString('es-PE', {
+            weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+        });
+
+        // Mostrar mapa para capturar
+        document.getElementById('map').style.display = 'block';
+        
+        if (!map) {
+            initMap();
+        } else {
+            map.invalidateSize();
+        }
+        
+        // Pequeña espera para que el mapa se renderice completamente
+        await delay(300);
+
+        let mapaImg = null;
+        
+        // Capturar el mapa
+        try {
+            const mapElement = document.getElementById('map');
+            const canvas = await html2canvas(mapElement, {
+                useCORS: true,
+                allowTaint: true,
+                backgroundColor: '#ffffff'
+            });
+            mapaImg = canvas.toDataURL("image/png");
+        } catch(e) { 
+            console.log("Error capturando mapa:", e); 
+            mapaImg = null;
+        }
+        
+        // Crear tarjeta temporal
+        const tarjeta = document.createElement('div');
+        tarjeta.style.cssText = 'position:fixed; left:-9999px; top:0; width:380px; background:white; font-family:Arial,sans-serif;';
+        
+        const mapaHTML = mapaImg ? 
+            '<img src="' + mapaImg + '" style="width:100%; height:100px; object-fit:cover; border-radius:6px;">' :
+            '<div style="width:100%; height:100px; background:#ddd; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:30px;">🗺️</div>';
+        
+        tarjeta.innerHTML = 
+            '<div style="background:#1e3a8a; color:white; padding:12px; display:flex; justify-content:space-between;">' +
+                '<span style="font-weight:bold;">' + tipo + '</span>' +
+                '<span style="background:#dc2626; padding:2px 8px; border-radius:4px; font-size:12px;">' + autoridad + '</span>' +
+            '</div>' +
+            '<div style="padding:12px;">' +
+                '<div style="margin-bottom:6px; font-size:12px;"><span style="color:#666;">📍 DIRECCIÓN:</span><br><span style="font-weight:bold; font-size:13px;">' + lugar + '</span></div>' +
+                '<div style="margin-bottom:8px; font-size:13px;"><span style="color:#666;">🕐 FECHA:</span> <span style="font-weight:bold;">' + fecha + '</span></div>' +
+                mapaHTML +
+                '<div style="background:#f0f9ff; padding:8px; border-radius:6px; font-size:12px; color:#0369a1; border-left:3px solid #0ea5e9; margin-top:8px;">' + mensaje + '</div>' +
+            '</div>' +
+            '<div style="position:relative;">' +
+                '<img src="logo.png" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); opacity:0.08; width:180px;" onerror="this.style.display=\'none\'">' +
+                '<div style="background:#f1f5f9; padding:6px; text-align:center; font-size:10px; color:#64748b;">' +
+                    'Reporte generado por Imperio Digital' +
+                '</div>' +
+            '</div>';
+
+        document.body.appendChild(tarjeta);
+
+        const finalCanvas = await html2canvas(tarjeta, {scale: 2});
+        imagenGenerada = finalCanvas.toDataURL("image/png");
+
+        document.body.removeChild(tarjeta);
+        
+        return {
+            imgData: imagenGenerada,
+            tipo,
+            autoridad,
+            lugar,
+            fecha,
+            mensaje
+        };
+    }
+
+    // Descargar imagen
+    async function descargarImagen() {
+        showLoading();
+        
+        try {
+            const data = await generarImagen();
+            
+            const link = document.createElement('a');
+            link.download = 'reporte_transito.png';
+            link.href = data.imgData;
+            link.click();
+            
+            hideLoading();
+            mostrarInfo("✅ Imagen descargada correctamente");
+            
+        } catch(err) {
+            hideLoading();
+            mostrarError(err.message);
+            console.error(err);
+        }
+    }
+
+    // Compartir por WhatsApp
+    async function compartirWhatsApp() {
+        const lugar = document.getElementById('inputLocation').value;
+        
+        if(!lugar || lugar === "Obteniendo...") {
+            mostrarError("⚠️ Obtén la ubicación primero");
+            return;
+        }
+
+        showLoading();
+
+        try {
+            const data = await generarImagen();
+            
+            // Descargar imagen (opcional, se puede comentar si no se desea)
+            const link = document.createElement('a');
+            link.download = 'reporte_transito.png';
+            link.href = data.imgData;
+            link.click();
+            
+            hideLoading();
+
+            const texto = "🚦 *REPORTE DE TRÁNSITO*\n\n" +
+                "📋 *Tipo:* " + data.tipo + "\n" +
+                "👮 *Autoridad:* " + data.autoridad + "\n" +
+                "📍 *Dirección:* " + data.lugar + "\n" +
+                "🕐 *Fecha:* " + data.fecha + "\n" +
+                "💬 *Mensaje:* " + data.mensaje;
+            
+            window.open("https://wa.me/?text=" + encodeURIComponent(texto), '_blank');
+            
+        } catch(err) {
+            hideLoading();
+            mostrarError("Error: " + err.message);
+            console.error(err);
+        }
+    }
+
+    function mostrarDonacion(){
+        document.getElementById('modal-donacion').style.display = 'flex';
+    }
+
+    function cerrarDonacion(){
+        document.getElementById('modal-donacion').style.display = 'none';
+    }
+
+    // Inicializar contador al cargar
+    document.getElementById('count').innerText = document.getElementById('mensaje').value.length;
+</script>
+
+</body>
+</html>
